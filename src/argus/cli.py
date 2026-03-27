@@ -42,7 +42,7 @@ def build_parser() -> argparse.ArgumentParser:
         "input_dir",
         nargs="?",
         default="ingest",
-        help="Directory to scan. Defaults to ./ingest",
+        help="Directory to scan. Use a normal filesystem path such as ./ingest or /Volumes/Share. Defaults to ./ingest",
     )
     scan_parser.add_argument(
         "--output-dir",
@@ -124,7 +124,7 @@ def build_parser() -> argparse.ArgumentParser:
         "input_dir",
         nargs="?",
         default="ingest",
-        help="Directory to scan for source videos. Defaults to ./ingest",
+        help="Directory to scan for source videos. Use a mounted filesystem path such as ./ingest or /Volumes/Share. Defaults to ./ingest",
     )
     status_parser.add_argument(
         "--output-dir",
@@ -247,7 +247,7 @@ def build_parser() -> argparse.ArgumentParser:
         "input_dir",
         nargs="?",
         default="ingest",
-        help="Source directory to scan. Defaults to ./ingest",
+        help="Source directory to scan. Use a mounted filesystem path such as ./ingest or /Volumes/Share. Defaults to ./ingest",
     )
     run_parser.add_argument(
         "--output-dir",

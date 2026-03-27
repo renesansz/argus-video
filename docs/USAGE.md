@@ -113,13 +113,17 @@ Important:
 
 - the source folder does not need to live inside this repository
 - any readable path is valid, including mounted external drives and mounted network volumes
+- for SMB shares, mount the share in macOS and use the mounted path under `/Volumes/...`
+- do not use raw `smb://` URLs as Argus source paths
 - the generated output can be written to a separate local folder if you prefer
+- local output is recommended even when the source media is on a network share
 
 Example source folders:
 
 - `/Users/you/Videos/Project-A`
 - `/Volumes/ExternalDrive/Footage`
 - `/Volumes/SharedMedia/Client-Library`
+- `/Volumes/StudioNAS/Footage`
 
 ## 1. Scan Files
 
@@ -127,6 +131,12 @@ You can scan any readable folder path:
 
 ```bash
 argus scan /Volumes/SharedMedia/Client-Library --output-dir ~/ArgusOutput
+```
+
+Mounted NAS example:
+
+```bash
+argus scan /Volumes/StudioNAS/Footage --output-dir ~/ArgusOutput
 ```
 
 Basic scan:
@@ -297,6 +307,12 @@ If you want a shorter path for non-technical users, you can run the full pipelin
 argus run /Volumes/SharedMedia/Client-Library --output-dir ~/ArgusOutput
 ```
 
+Mounted SMB/NAS example:
+
+```bash
+argus run /Volumes/StudioNAS/Footage --output-dir ~/ArgusOutput
+```
+
 This performs:
 
 1. scan
@@ -343,6 +359,27 @@ argus serve --output-dir /path/to/argus-output --open-browser
 ```
 
 ## Troubleshooting
+
+### My footage is on an SMB share
+
+Use the mounted filesystem path, not the raw SMB URL.
+
+Use this:
+
+```bash
+argus run /Volumes/StudioNAS/Footage --output-dir ~/ArgusOutput
+```
+
+Do not use this:
+
+```bash
+argus run smb://studio-nas.local/Footage --output-dir smb://studio-nas.local/ArgusOutput
+```
+
+Recommendation:
+
+- source media can be on a mounted network share
+- Argus output should stay on local disk when possible
 
 ### `argus doctor` says `ffprobe` is missing
 

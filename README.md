@@ -38,6 +38,9 @@ argus serve --open-browser
 ```
 
 Any readable path works, including mounted external drives and mounted network volumes.
+If your media lives on a NAS over SMB, mount it in macOS first and use the mounted path under `/Volumes/...`.
+Do not pass raw `smb://` URLs to Argus.
+For best reliability, keep Argus output local even when the source media is on a network share.
 
 When the browser opens, you can:
 
@@ -45,6 +48,13 @@ When the browser opens, you can:
 - filter by classification status
 - copy the source path
 - reveal the file in Finder
+
+Example with a mounted NAS share:
+
+```bash
+argus run /Volumes/StudioNAS/SourceFootage --output-dir ~/ArgusOutput
+argus serve --output-dir ~/ArgusOutput --open-browser
+```
 
 If you want a more detailed walkthrough, see [docs/USAGE.md](docs/USAGE.md).
 
