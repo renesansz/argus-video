@@ -56,17 +56,19 @@ ollama pull gemma3
 
 ## Directory Layout
 
-Argus expects these project-local directories:
+Argus ships with convenient defaults, but they are not required:
 
 - `ingest/`
-  Drop source videos here.
+  Optional default source folder for quick local tests.
 - `output/`
-  Generated JSON, frames, database, and progress state are written here.
+  Default location for generated JSON, frames, database, and progress state.
 
 Important:
 
-- source media in `ingest/` is ignored by git
-- generated output in `output/` is ignored by git
+- you can point Argus at any readable source folder, not just `ingest/`
+- source media in repo-local `ingest/` is ignored by git
+- generated output in repo-local `output/` is ignored by git
+- you can write output to a different local folder with `--output-dir`
 
 ## Supported Formats
 
@@ -101,13 +103,31 @@ This checks:
 
 The typical workflow is:
 
-1. Put videos into `ingest/`
+1. Choose a source folder
 2. Scan the folder and optionally sample frames
 3. Caption sampled frames locally
 4. Build the SQLite index
 5. Search from the CLI or local browser UI
 
+Important:
+
+- the source folder does not need to live inside this repository
+- any readable path is valid, including mounted external drives and mounted network volumes
+- the generated output can be written to a separate local folder if you prefer
+
+Example source folders:
+
+- `/Users/you/Videos/Project-A`
+- `/Volumes/ExternalDrive/Footage`
+- `/Volumes/SharedMedia/Client-Library`
+
 ## 1. Scan Files
+
+You can scan any readable folder path:
+
+```bash
+argus scan /Volumes/SharedMedia/Client-Library --output-dir ~/ArgusOutput
+```
 
 Basic scan:
 
@@ -158,6 +178,12 @@ This shows:
 During captioning, Argus also writes a progress file at:
 
 - `output/progress.json`
+
+If you are working outside the repo-local defaults, point `status` at the same source and output directories:
+
+```bash
+argus status /Volumes/SharedMedia/Client-Library --output-dir ~/ArgusOutput --watch
+```
 
 ## 3. Caption Frames Locally
 
@@ -263,6 +289,27 @@ The browser UI supports:
 
 The UI is local-only by default.
 
+## One-Command Pipeline
+
+If you want a shorter path for non-technical users, you can run the full pipeline in one command:
+
+```bash
+argus run /Volumes/SharedMedia/Client-Library --output-dir ~/ArgusOutput
+```
+
+This performs:
+
+1. scan
+2. frame sampling
+3. captioning
+4. SQLite indexing
+
+You can then open the browser UI against that output directory:
+
+```bash
+argus serve --output-dir ~/ArgusOutput --open-browser
+```
+
 ## Finder Reveal
 
 From the browser UI, the `Reveal in Finder` action uses the indexed file path and calls macOS Finder reveal locally.
@@ -281,18 +328,18 @@ Argus commonly writes:
 
 ## Recommended Re-run Pattern
 
-If you add more files to `ingest/`, a common refresh cycle is:
+If you add more files to your source folder, a common refresh cycle is:
 
 ```bash
-argus scan --sample-frames --frame-count 4
-argus caption --model gemma3
-argus index
+argus scan /path/to/source/folder --output-dir /path/to/argus-output --sample-frames --frame-count 4
+argus caption --output-dir /path/to/argus-output --model gemma3
+argus index --output-dir /path/to/argus-output
 ```
 
 Then browse:
 
 ```bash
-argus serve --open-browser
+argus serve --output-dir /path/to/argus-output --open-browser
 ```
 
 ## Troubleshooting

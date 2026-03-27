@@ -13,6 +13,19 @@ from argus.serve import serve_ui
 from argus.status import build_status_report, run_status_tui
 
 
+def caption_progress_printer(payload: dict) -> None:
+    total_frames = payload.get("total_frames") or "?"
+    current_number = payload.get("processed_frames", 0) + 1
+    timestamp = payload.get("frame_timestamp_seconds")
+    timestamp_text = f"{timestamp:.3f}s" if isinstance(timestamp, (int, float)) else "?"
+    print(
+        f"[caption] {current_number}/{total_frames} "
+        f"{payload.get('filename')} frame {payload.get('frame_index')} "
+        f"@ {timestamp_text}",
+        flush=True,
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="argus",
@@ -225,6 +238,53 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Open the UI in your default browser after the server starts.",
     )
+
+    run_parser = subparsers.add_parser(
+        "run",
+        help="Run scan, caption, and index in one command against any source folder.",
+    )
+    run_parser.add_argument(
+        "input_dir",
+        nargs="?",
+        default="ingest",
+        help="Source directory to scan. Defaults to ./ingest",
+    )
+    run_parser.add_argument(
+        "--output-dir",
+        default="output",
+        help="Directory for generated manifests, frames, and database. Defaults to ./output",
+    )
+    run_parser.add_argument(
+        "--frame-count",
+        type=int,
+        default=4,
+        help="Number of representative frames to sample per clip. Defaults to 4.",
+    )
+    run_parser.add_argument(
+        "--model",
+        default=DEFAULT_VISION_MODEL,
+        help=f"Ollama vision model to use. Defaults to {DEFAULT_VISION_MODEL}",
+    )
+    run_parser.add_argument(
+        "--ollama-host",
+        default=DEFAULT_OLLAMA_HOST,
+        help=f"Ollama API host. Defaults to {DEFAULT_OLLAMA_HOST}",
+    )
+    run_parser.add_argument(
+        "--db-path",
+        default=None,
+        help="Optional SQLite database path. Defaults to <output-dir>/argus.db",
+    )
+    run_parser.add_argument(
+        "--force-caption",
+        action="store_true",
+        help="Re-caption frames even if captions already exist.",
+    )
+    run_parser.add_argument(
+        "--pretty",
+        action="store_true",
+        help="Pretty-print the combined pipeline report to stdout.",
+    )
     return parser
 
 
@@ -289,19 +349,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "caption":
         progress_callback = None
         if not args.pretty:
-            def progress_callback(payload: dict) -> None:
-                total_frames = payload.get("total_frames") or "?"
-                current_number = payload.get("processed_frames", 0) + 1
-                timestamp = payload.get("frame_timestamp_seconds")
-                timestamp_text = (
-                    f"{timestamp:.3f}s" if isinstance(timestamp, (int, float)) else "?"
-                )
-                print(
-                    f"[caption] {current_number}/{total_frames} "
-                    f"{payload.get('filename')} frame {payload.get('frame_index')} "
-                    f"@ {timestamp_text}",
-                    flush=True,
-                )
+            progress_callback = caption_progress_printer
         report = caption_output_items(
             Path(args.output_dir),
             model=args.model,
@@ -388,6 +436,41 @@ def main(argv: list[str] | None = None) -> int:
             port=args.port,
             open_browser=args.open_browser,
         )
+
+    if args.command == "run":
+        output_dir = Path(args.output_dir)
+        db_path = Path(args.db_path) if args.db_path else default_db_path(output_dir)
+        scan_report = run_scan(
+            Path(args.input_dir),
+            output_dir,
+            sample_frames=True,
+            frame_count=args.frame_count,
+        )
+        caption_report = caption_output_items(
+            output_dir,
+            model=args.model,
+            ollama_host=args.ollama_host,
+            force=args.force_caption,
+            progress_callback=None if args.pretty else caption_progress_printer,
+        )
+        index_report = index_output_items(output_dir, db_path=db_path)
+        combined = {
+            "input_dir": str(Path(args.input_dir).resolve()),
+            "output_dir": str(output_dir.resolve()),
+            "scan": scan_report,
+            "caption": caption_report,
+            "index": index_report,
+        }
+        if args.pretty:
+            print(json.dumps(combined, indent=2))
+        else:
+            print(
+                f"Run complete. Scanned {scan_report['file_count']} file(s), "
+                f"captioned {caption_report['frames_captioned']} frame(s), "
+                f"indexed {index_report['indexed_videos']} video(s)."
+            )
+            print(f"Database: {index_report['db_path']}")
+        return 0
 
     parser.error(f"Unknown command: {args.command}")
     return 2

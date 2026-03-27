@@ -11,7 +11,7 @@ Argus is for video teams who want a local workflow, not a cloud asset manager.
 If you are comfortable in a terminal, you can run the whole pipeline directly.
 If you are not especially technical, the simplest mental model is:
 
-1. put source videos into `ingest/`
+1. point Argus at any source folder
 2. run a few commands
 3. open the browser UI
 4. search by filename, tags, captions, or visible text
@@ -33,11 +33,11 @@ python3 -m pip install -e .
 brew install ffmpeg
 ollama pull gemma3
 argus doctor --model gemma3
-argus scan --sample-frames --frame-count 4
-argus caption --model gemma3
-argus index
+argus run /path/to/source/folder --output-dir /path/to/argus-output
 argus serve --open-browser
 ```
+
+Any readable path works, including mounted external drives and mounted network volumes.
 
 When the browser opens, you can:
 
@@ -320,6 +320,7 @@ argus caption --model gemma3
 argus index
 argus search "<query>"
 argus serve --open-browser
+argus run /Volumes/Shared/Footage --output-dir ~/ArgusOutput
 ```
 
 Defaults:

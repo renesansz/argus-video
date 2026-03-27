@@ -305,6 +305,37 @@ class ScannerTests(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["filename"], "warehouse.mp4")
 
+    @patch("argus.cli.index_output_items")
+    @patch("argus.cli.caption_output_items")
+    @patch("argus.cli.run_scan")
+    def test_cli_run_command_executes_pipeline(
+        self, run_scan_mock, caption_output_items_mock, index_output_items_mock
+    ) -> None:
+        from argus.cli import main
+
+        run_scan_mock.return_value = {"file_count": 2}
+        caption_output_items_mock.return_value = {"frames_captioned": 8}
+        index_output_items_mock.return_value = {
+            "indexed_videos": 2,
+            "db_path": "/tmp/argus.db",
+        }
+
+        exit_code = main(
+            [
+                "run",
+                "/Volumes/Shared/Footage",
+                "--output-dir",
+                "/tmp/argus-output",
+                "--model",
+                "gemma3",
+            ]
+        )
+
+        self.assertEqual(exit_code, 0)
+        run_scan_mock.assert_called_once()
+        caption_output_items_mock.assert_called_once()
+        index_output_items_mock.assert_called_once()
+
     def test_query_videos_without_search_returns_recent_rows(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
