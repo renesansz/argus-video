@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 from argus.captioner import (
     caption_output_items,
     match_ollama_model,
+    normalize_clip_title,
     normalize_tags,
     summarize_captions,
 )
@@ -122,7 +123,10 @@ class ScannerTests(unittest.TestCase):
     def test_summarize_captions_parses_json_response(self, ollama_chat_mock) -> None:
         ollama_chat_mock.return_value = {
             "message": {
-                "content": '{"summary":"Wide exterior drone footage.","suggested_tags":["Drone","aerial","drone"]}'
+                "content": (
+                    '{"title":"Aerial drone view over roads and fields.",'
+                    '"summary":"Wide exterior drone footage.","suggested_tags":["Drone","aerial","drone"]}'
+                )
             }
         }
 
@@ -133,8 +137,32 @@ class ScannerTests(unittest.TestCase):
         )
 
         self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["title"], "Aerial drone view over roads and fields.")
+        self.assertLessEqual(len(result["title"]), 100)
         self.assertEqual(result["summary"], "Wide exterior drone footage.")
         self.assertEqual(result["suggested_tags"], ["drone", "aerial"])
+
+    @patch("argus.captioner.ollama_chat")
+    def test_summarize_captions_rejects_missing_title(self, ollama_chat_mock) -> None:
+        ollama_chat_mock.return_value = {
+            "message": {
+                "content": '{"summary":"Wide exterior drone footage.","suggested_tags":["drone"]}'
+            }
+        }
+
+        result = summarize_captions(
+            [{"timestamp_seconds": 1.0, "caption": "Drone shot over a road."}],
+            model="gemma3",
+            ollama_host="http://localhost:11434",
+        )
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("required fields", result["reason"])
+
+    def test_normalize_clip_title_truncates_to_max_length(self) -> None:
+        long_title = "word " * 40
+        out = normalize_clip_title(long_title, max_len=100)
+        self.assertLessEqual(len(out), 100)
 
     def test_normalize_tags_lowercases_and_deduplicates(self) -> None:
         result = normalize_tags(["Drone", " aerial ", "drone", ""])
@@ -276,6 +304,7 @@ class ScannerTests(unittest.TestCase):
                         "frame_rate": 24.0,
                     },
                 },
+                "title": "Warehouse aisle chat beside stacked boxes",
                 "summary": "Two men talk in a warehouse aisle beside stacked cardboard boxes.",
                 "suggested_tags": ["warehouse", "boxes", "conversation"],
                 "classification": {"model": "gemma3"},
@@ -299,11 +328,15 @@ class ScannerTests(unittest.TestCase):
 
             report = index_output_items(output)
             results = search_index(Path(report["db_path"]), "warehouse", limit=5)
+            title_hits = search_index(Path(report["db_path"]), "aisle", limit=5)
 
         self.assertEqual(report["indexed_videos"], 1)
         self.assertEqual(report["indexed_frames"], 1)
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["filename"], "warehouse.mp4")
+        self.assertEqual(results[0]["title"], "Warehouse aisle chat beside stacked boxes")
+        self.assertEqual(len(title_hits), 1)
+        self.assertEqual(title_hits[0]["title"], "Warehouse aisle chat beside stacked boxes")
 
     @patch("argus.cli.index_output_items")
     @patch("argus.cli.caption_output_items")
@@ -354,6 +387,7 @@ class ScannerTests(unittest.TestCase):
                     "classification_status": "captions_ready",
                     "audio_required": False,
                     "media": {"video": {}},
+                    "title": f"clip title {index}",
                     "summary": f"clip {index}",
                     "suggested_tags": [f"tag-{index}"],
                     "sample_frames": {"frames": []},
@@ -367,6 +401,7 @@ class ScannerTests(unittest.TestCase):
 
         self.assertEqual(len(results), 2)
         self.assertEqual(results[0]["filename"], "clip-1.mp4")
+        self.assertEqual(results[0]["title"], "clip title 1")
 
     @patch("argus.captioner.captioning_preflight")
     @patch("argus.captioner.caption_item_record")

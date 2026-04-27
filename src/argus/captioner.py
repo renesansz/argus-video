@@ -15,15 +15,17 @@ FRAME_CAPTION_PROMPT = (
     "You are classifying a frame from silent B-roll footage for a searchable local media library. "
     "Return strict JSON with keys short_caption, tags, and visible_text. "
     "short_caption must be one concise sentence with only visible facts. "
-    "tags must be 3 to 8 short lowercase visual tags. "
+    "tags must be 35 to 49 short lowercase visual tags and it should accurately contains or represents the shot. "
     "visible_text must be a list of short strings that are actually readable in frame; otherwise return an empty list. "
     "Do not use markdown, headings, preambles, apologies, or questions."
 )
 
 VIDEO_SUMMARY_PROMPT = (
     "You are classifying silent B-roll footage for a local media library. "
-    "Based on timestamped frame captions, produce a concise overall summary and a useful list of search tags. "
-    "Prefer concrete visual terms over abstract adjectives. "
+    "Based on timestamped frame captions, produce: (1) a short title, (2) a fuller summary, and (3) search tags. "
+    "The title must be an attention-grabbing one-line statement that includes the main topic keywords from the clip. "
+    "The summary should give more context and purpose of the clip than the title. "
+    "Prefer concrete visual terms over abstract adjectives; be original, unique, and succinct. "
     "Do not include conversational filler. "
     "Only include brand names or readable on-screen text if they are visually clear and central to the clip."
 )
@@ -204,6 +206,7 @@ def caption_item_record(
         )
         if summary_result["status"] == "ok":
             record["classification_status"] = "captions_ready"
+            record["title"] = summary_result["title"]
             record["summary"] = summary_result["summary"]
             record["suggested_tags"] = summary_result["suggested_tags"]
             record["classification"] = {
@@ -287,9 +290,12 @@ def summarize_captions(
                 "content": (
                     "Frame captions:\n"
                     + "\n".join(lines)
-                    + "\n\nReturn strict JSON with keys summary and suggested_tags. "
-                    + "summary should be 1 to 2 sentences. "
-                    + "suggested_tags should be 5 to 12 short lowercase tags."
+                    + "\n\nReturn strict JSON with keys title, summary, and suggested_tags. "
+                    + "title: one short line, attention-grabbing, must include main topic keywords; "
+                    + "maximum 100 characters, no line breaks, no quotes wrapping the whole title. "
+                    + "summary: Minimum 15 characters - Maximum 200 characters, Minimum 5 words; "
+                    + "more detailed than the title. "
+                    + "suggested_tags should be 35 to 49 short lowercase tags."
                 ),
             },
         ],
@@ -311,9 +317,21 @@ def summarize_captions(
     except json.JSONDecodeError as exc:
         return {"status": "error", "reason": f"invalid summary json: {exc}"}
 
+    title = parsed.get("title")
     summary = parsed.get("summary")
     suggested_tags = parsed.get("suggested_tags")
-    if not isinstance(summary, str) or not isinstance(suggested_tags, list):
+    if (
+        not isinstance(title, str)
+        or not isinstance(summary, str)
+        or not isinstance(suggested_tags, list)
+    ):
+        return {
+            "status": "error",
+            "reason": "summary response missing required fields",
+        }
+
+    normalized_title = normalize_clip_title(title)
+    if not normalized_title:
         return {
             "status": "error",
             "reason": "summary response missing required fields",
@@ -326,6 +344,7 @@ def summarize_captions(
     ]
     return {
         "status": "ok",
+        "title": normalized_title,
         "summary": normalize_sentence(summary),
         "suggested_tags": normalize_tags(cleaned_tags),
     }
@@ -508,6 +527,20 @@ def base_model_name(value: str | None) -> str | None:
 def normalize_sentence(value: str) -> str:
     collapsed = " ".join(value.split()).strip()
     return collapsed
+
+
+def normalize_clip_title(value: str, *, max_len: int = 100) -> str:
+    """Collapse whitespace and cap length for storage and display."""
+    text = normalize_sentence(value)
+    if not text or len(text) <= max_len:
+        return text
+    chunk = text[: max_len + 1]
+    cut = chunk.rfind(" ", 0, max_len + 1)
+    if cut >= max(1, max_len // 2):
+        base = chunk[:cut].rstrip(" ,.;:!?")
+    else:
+        base = text[:max_len].rstrip(" ,.;:!?")
+    return base[:max_len]
 
 
 def normalize_tags(values: list[str]) -> list[str]:

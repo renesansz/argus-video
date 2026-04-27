@@ -52,6 +52,7 @@ def search_index(db_path: Path, query: str, *, limit: int = 10) -> list[dict]:
               videos.filename,
               videos.path,
               videos.classification_status,
+              videos.title,
               videos.summary,
               videos.suggested_tags_json,
               videos.duration_seconds,
@@ -78,6 +79,7 @@ def search_index(db_path: Path, query: str, *, limit: int = 10) -> list[dict]:
                 "filename": row["filename"],
                 "path": row["path"],
                 "classification_status": row["classification_status"],
+                "title": row["title"],
                 "summary": row["summary"],
                 "suggested_tags": json.loads(row["suggested_tags_json"] or "[]"),
                 "duration_seconds": row["duration_seconds"],
@@ -118,6 +120,7 @@ def query_videos(
               filename,
               path,
               classification_status,
+              title,
               summary,
               suggested_tags_json,
               duration_seconds,
@@ -191,6 +194,7 @@ def create_schema(connection: sqlite3.Connection) -> None:
           height INTEGER,
           frame_rate REAL,
           has_audio INTEGER,
+          title TEXT,
           summary TEXT,
           suggested_tags_json TEXT NOT NULL,
           classification_json TEXT,
@@ -217,6 +221,15 @@ def create_schema(connection: sqlite3.Connection) -> None:
         );
         """
     )
+    ensure_videos_title_column(connection)
+
+
+def ensure_videos_title_column(connection: sqlite3.Connection) -> None:
+    """Add title column when upgrading an existing database."""
+    rows = connection.execute("PRAGMA table_info(videos)").fetchall()
+    column_names = {row[1] for row in rows}
+    if "title" not in column_names:
+        connection.execute("ALTER TABLE videos ADD COLUMN title TEXT")
 
 
 def reset_index(connection: sqlite3.Connection) -> None:
@@ -235,9 +248,9 @@ def index_item_record(connection: sqlite3.Connection, record: dict) -> int:
         INSERT INTO videos (
           id, filename, path, extension, file_created_at, file_modified_at,
           classification_status, audio_required, duration_seconds, codec,
-          width, height, frame_rate, has_audio, summary, suggested_tags_json,
+          width, height, frame_rate, has_audio, title, summary, suggested_tags_json,
           classification_json, raw_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             record.get("id"),
@@ -254,6 +267,7 @@ def index_item_record(connection: sqlite3.Connection, record: dict) -> int:
             video.get("height"),
             video.get("frame_rate"),
             none_to_int(media.get("has_audio")),
+            record.get("title"),
             record.get("summary"),
             json.dumps(suggested_tags),
             json.dumps(record.get("classification", {})),
@@ -266,6 +280,7 @@ def index_item_record(connection: sqlite3.Connection, record: dict) -> int:
     searchable_chunks = [
         record.get("filename", ""),
         record.get("path", ""),
+        record.get("title", "") or "",
         record.get("summary", ""),
         " ".join(suggested_tags),
     ]
@@ -375,6 +390,7 @@ def row_to_result(row: sqlite3.Row, *, match_text: str) -> dict:
         "filename": row["filename"],
         "path": row["path"],
         "classification_status": row["classification_status"],
+        "title": row["title"],
         "summary": row["summary"],
         "suggested_tags": json.loads(row["suggested_tags_json"] or "[]"),
         "duration_seconds": row["duration_seconds"],
