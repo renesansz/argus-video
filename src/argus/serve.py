@@ -675,7 +675,7 @@ def render_index_html(*, demo_mode: bool = False) -> str:
       const s = value == null ? "" : String(value);
       if (
         s.includes(",")
-        || s.indexOf(34) >= 0
+        || s.includes('"')
         || s.includes(String.fromCharCode(10))
         || s.includes(String.fromCharCode(13))
       ) {
@@ -701,7 +701,7 @@ def render_index_html(*, demo_mode: bool = False) -> str:
       return parent
         .trim()
         .toLowerCase()
-        .split(/[\\s_]+/)
+        .split(/[\s_]+/)
         .filter(Boolean)
         .join("-");
     }
