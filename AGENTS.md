@@ -33,6 +33,8 @@ source .venv/bin/activate
 python3 -m pip install -e .
 ```
 
+The same install can be run without activating the venv with `./scripts/argus install` or `make install` (see `scripts/argus` and the `Makefile`).
+
 No-install development runs can use:
 
 ```bash
