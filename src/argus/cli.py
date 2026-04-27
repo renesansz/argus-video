@@ -410,6 +410,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         for index, result in enumerate(results, start=1):
             tags = ", ".join(result["suggested_tags"][:6])
+            title = result.get("title") or ""
             summary = result["summary"] or ""
             match_text = result["match_text"] or ""
             print(f"{index}. {result['filename']}")
@@ -422,6 +423,8 @@ def main(argv: list[str] | None = None) -> int:
                 )
             if tags:
                 print(f"   Tags: {tags}")
+            if title:
+                print(f"   Title: {title}")
             if summary:
                 print(f"   Summary: {summary}")
             if match_text:

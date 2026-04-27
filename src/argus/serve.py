@@ -16,6 +16,7 @@ DEMO_RESULTS = [
         "filename": "clip-001.mp4",
         "path": "/Volumes/Media/Project-A/clip-001.mp4",
         "classification_status": "captions_ready",
+        "title": "Office hallway walk with laptop in hand",
         "summary": "A person walks through a bright office hallway while carrying a laptop.",
         "suggested_tags": ["office", "hallway", "person", "walking", "laptop"],
         "duration_seconds": 14.2,
@@ -29,6 +30,7 @@ DEMO_RESULTS = [
         "filename": "clip-002.mp4",
         "path": "/Volumes/Media/Project-B/clip-002.mp4",
         "classification_status": "captions_ready",
+        "title": "Hands packing product boxes on a worktable",
         "summary": "Close-up footage of hands arranging product boxes on a worktable.",
         "suggested_tags": ["close-up", "hands", "boxes", "table", "product"],
         "duration_seconds": 9.6,
@@ -42,6 +44,7 @@ DEMO_RESULTS = [
         "filename": "clip-003.mp4",
         "path": "/Volumes/Media/Project-C/clip-003.mp4",
         "classification_status": "captions_ready",
+        "title": "Busy storefront exterior with shoppers coming and going",
         "summary": "Wide exterior shot of a storefront with people entering and leaving.",
         "suggested_tags": ["exterior", "wide shot", "storefront", "people"],
         "duration_seconds": 22.8,
@@ -346,6 +349,14 @@ def render_index_html(*, demo_mode: bool = False) -> str:
       font-size: 0.82rem;
       word-break: break-all;
     }
+    .clip-title {
+      margin: 0 0 0.35rem;
+      font-size: 1.05rem;
+      font-weight: 600;
+      line-height: 1.35;
+      color: var(--ink);
+      letter-spacing: -0.01em;
+    }
     .summary, .match {
       margin: 0;
       line-height: 1.55;
@@ -459,7 +470,7 @@ def render_index_html(*, demo_mode: bool = False) -> str:
     <section class="controls panel">
       <div class="control">
         <label for="query">Search</label>
-        <input id="query" type="search" placeholder="Search by filename, tag, summary, caption, or visible text" autocomplete="off">
+        <input id="query" type="search" placeholder="Search by filename, title, tag, summary, caption, or visible text" autocomplete="off">
       </div>
       <div class="control">
         <label for="status">Status</label>
@@ -544,6 +555,7 @@ def render_index_html(*, demo_mode: bool = False) -> str:
 
       resultsEl.innerHTML = results.map((result) => {
         const tags = (result.suggested_tags || []).map((tag) => `<span class="tag">${tag}</span>`).join("");
+        const clipTitle = result.title ? `<p class="clip-title">${result.title}</p>` : "";
         const summary = result.summary ? `<p class="summary">${result.summary}</p>` : "";
         const match = result.match_text ? `<p class="match">${highlightBrackets(result.match_text)}</p>` : "";
         const duration = typeof result.duration_seconds === "number" ? `${result.duration_seconds.toFixed(2)}s` : "unknown";
@@ -561,6 +573,7 @@ def render_index_html(*, demo_mode: bool = False) -> str:
               <span>${duration}</span>
               <span>${resolution}</span>
             </div>
+            ${clipTitle}
             ${summary}
             ${match}
             <div class="tags">${tags}</div>
@@ -584,6 +597,7 @@ def render_index_html(*, demo_mode: bool = False) -> str:
           const haystack = [
             result.filename,
             result.path,
+            result.title,
             result.summary,
             ...(result.suggested_tags || []),
             result.match_text
