@@ -15,7 +15,7 @@ FRAME_CAPTION_PROMPT = (
     "You are classifying a frame from silent B-roll footage for a searchable local media library. "
     "Return strict JSON with keys short_caption, tags, and visible_text. "
     "short_caption must be one concise sentence with only visible facts. "
-    "tags must be 35 to 49 short lowercase visual tags and they should accurately contain or represent the shot. "
+    "tags must be 35 to 49 short lowercase visual tags and they should accurately contain or represent the shot. The first 5 tags are the most important concerning search relevancy. "
     "visible_text must be a list of short strings that are actually readable in frame; otherwise return an empty list. "
     "Do not use markdown, headings, preambles, apologies, or questions."
 )
@@ -23,11 +23,12 @@ FRAME_CAPTION_PROMPT = (
 VIDEO_SUMMARY_PROMPT = (
     "You are classifying silent B-roll footage for a local media library. "
     "Based on timestamped frame captions, produce: (1) a short title, (2) a fuller summary, and (3) search tags. "
-    "The title must be an attention-grabbing one-line statement that includes the main topic keywords from the clip. "
-    "The summary should give more context and purpose of the clip than the title. "
+    "The title must be an attention-grabbing one-line statement that includes the main topic keywords from the clip, but maximum of 100 characters. "
+    "The summary should give more context and purpose of the clip than the title, but maximum of 200 characters. "
     "Prefer concrete visual terms over abstract adjectives; be original, unique, and succinct. "
     "Do not include conversational filler. "
-    "Only include brand names or readable on-screen text if they are visually clear and central to the clip."
+    "Only include brand names or readable on-screen text if they are visually clear and central to the clip. "
+    "Do not include any markdown, headings, preambles, apologies, or questions."
 )
 
 
