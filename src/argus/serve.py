@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import csv
+import io
 import json
+import re
 import subprocess
 import webbrowser
 from http import HTTPStatus
@@ -9,6 +12,89 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from argus.database import fetch_status_options, get_video_path, query_videos
+
+# Blackbox CSV: header text must match metadata_example.csv exactly.
+BLACKBOX_CSV_HEADER_ROW: tuple[str, ...] = (
+    "#Keep this line: File Name",
+    "Description (min 15, max 200 characters, must be least 5 words)",
+    "Keywords (min 8, max 49, separated by comma, and no repetition)",
+    "Category (use dropdown menu)",
+    "Batch name (Batch name is not applicable for curator)",
+    "Editorial (use dropdown menu)",
+    "Editorial Text",
+    "Editorial City",
+    "Editorial State",
+    "Editorial Country (use dropdown menu)",
+    "Editorial Date",
+    "Title (Optional)",
+    "Shooting Country (Optional)",
+    "Shooting Date (Optional)",
+)
+
+BLACKBOX_EXPORT_CATEGORY = "Travel"
+
+
+def batch_name_from_video_path(path: str) -> str:
+    """Return slug from the file's immediate parent directory only (not full path)."""
+    p = Path(path)
+    if not path or p.name == p.anchor:
+        return ""
+    parent = p.parent
+    if not str(parent) or parent == p:
+        return ""
+    raw = parent.name.strip()
+    if not raw:
+        return ""
+    slug = re.sub(r"[\s_]+", "-", raw.lower().strip())
+    slug = re.sub(r"-+", "-", slug)
+    return slug.strip("-")
+
+
+def build_blackbox_csv_text(results: list[dict]) -> str:
+    """Build UTF-8 Blackbox CSV text (no BOM) for search result dicts from query_videos."""
+    buffer = io.StringIO(newline="")
+    writer = csv.writer(buffer)
+    writer.writerow(BLACKBOX_CSV_HEADER_ROW)
+    for item in results:
+        tags = item.get("suggested_tags") or []
+        keyword_text = ", ".join(str(t) for t in tags)
+        pth = item.get("path")
+        path_str = pth if isinstance(pth, str) else str(pth or "")
+        row = [
+            item.get("filename") or "",
+            item.get("summary") or "",
+            keyword_text,
+            BLACKBOX_EXPORT_CATEGORY,
+            batch_name_from_video_path(path_str),
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            item.get("title") or "",
+            "",
+            "",
+        ]
+        writer.writerow(row)
+    return buffer.getvalue()
+
+
+def build_blackbox_csv_bytes(results: list[dict]) -> bytes:
+    return build_blackbox_csv_text(results).encode("utf-8")
+
+
+def parse_search_params(query: str) -> tuple[str, str | None, int]:
+    """Shared query string parsing for /api/search and /api/export/blackbox."""
+    params = parse_qs(query)
+    text = params.get("q", [""])[0]
+    status = params.get("status", [""])[0] or None
+    limit_text = params.get("limit", ["25"])[0]
+    try:
+        limit = max(1, min(100, int(limit_text)))
+    except ValueError:
+        limit = 25
+    return text, status, limit
 
 DEMO_RESULTS = [
     {
@@ -98,14 +184,7 @@ def build_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                 )
                 return
             if parsed.path == "/api/search":
-                params = parse_qs(parsed.query)
-                query = params.get("q", [""])[0]
-                status = params.get("status", [""])[0] or None
-                limit_text = params.get("limit", ["25"])[0]
-                try:
-                    limit = max(1, min(100, int(limit_text)))
-                except ValueError:
-                    limit = 25
+                query, status, limit = parse_search_params(parsed.query)
                 results = query_videos(
                     db_path,
                     query=query,
@@ -113,6 +192,21 @@ def build_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                     limit=limit,
                 )
                 self.respond_json({"results": results, "count": len(results)})
+                return
+            if parsed.path == "/api/export/blackbox":
+                query, status, limit = parse_search_params(parsed.query)
+                results = query_videos(
+                    db_path,
+                    query=query,
+                    status=status,
+                    limit=limit,
+                )
+                data = build_blackbox_csv_bytes(results)
+                self.respond_bytes(
+                    data,
+                    "text/csv; charset=utf-8",
+                    'attachment; filename="argus-blackbox-export.csv"',
+                )
                 return
             self.respond_not_found()
 
@@ -169,6 +263,21 @@ def build_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
             self.send_header("Content-Length", str(len(encoded)))
             self.end_headers()
             self.wfile.write(encoded)
+
+        def respond_bytes(
+            self,
+            data: bytes,
+            content_type: str,
+            content_disposition: str,
+            *,
+            status: HTTPStatus = HTTPStatus.OK,
+        ) -> None:
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Disposition", content_disposition)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
 
         def respond_not_found(self) -> None:
             self.respond_json({"error": "Not found"}, status=HTTPStatus.NOT_FOUND)
@@ -305,7 +414,8 @@ def render_index_html(*, demo_mode: bool = False) -> str:
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 1rem;
+      flex-wrap: wrap;
+      gap: 0.75rem 1rem;
       padding: 0 0.3rem 1rem;
       color: var(--muted);
       font-family: "SF Mono", "IBM Plex Mono", ui-monospace, monospace;
@@ -490,6 +600,7 @@ def render_index_html(*, demo_mode: bool = False) -> str:
 
     <div class="meta">
       <span id="resultCount">Loading…</span>
+      <button type="button" class="button" id="exportBlackbox">Export to CSV (Blackbox)</button>
       <span>localhost only</span>
     </div>
 
@@ -510,7 +621,25 @@ def render_index_html(*, demo_mode: bool = False) -> str:
     const demoMode = __DEMO_MODE__;
     const demoResults = __DEMO_JSON__;
 
+    const BLACKBOX_CSV_HEADER = [
+      "#Keep this line: File Name",
+      "Description (min 15, max 200 characters, must be least 5 words)",
+      "Keywords (min 8, max 49, separated by comma, and no repetition)",
+      "Category (use dropdown menu)",
+      "Batch name (Batch name is not applicable for curator)",
+      "Editorial (use dropdown menu)",
+      "Editorial Text",
+      "Editorial City",
+      "Editorial State",
+      "Editorial Country (use dropdown menu)",
+      "Editorial Date",
+      "Title (Optional)",
+      "Shooting Country (Optional)",
+      "Shooting Date (Optional)"
+    ];
+
     let debounceTimer = null;
+    let lastResults = [];
 
     async function loadMeta() {
       if (demoMode) {
@@ -542,11 +671,66 @@ def render_index_html(*, demo_mode: bool = False) -> str:
       }, 1800);
     }
 
+    function csvEscapeCell(value) {
+      const s = value == null ? "" : String(value);
+      if (
+        s.includes(",")
+        || s.includes('"')
+        || s.includes(String.fromCharCode(10))
+        || s.includes(String.fromCharCode(13))
+      ) {
+        return (
+          String.fromCharCode(34)
+          + s.replaceAll(
+              String.fromCharCode(34),
+              String.fromCharCode(34) + String.fromCharCode(34)
+            )
+          + String.fromCharCode(34)
+        );
+      }
+      return s;
+    }
+
+    function batchNameFromPathClient(path) {
+      if (!path) return "";
+      const norm = path.split(String.fromCharCode(92)).join("/");
+      const parts = norm.split("/").filter(Boolean);
+      if (parts.length < 2) return "";
+      const parent = parts[parts.length - 2];
+      if (!parent) return "";
+      return parent
+        .trim()
+        .toLowerCase()
+        .split(/[\s_]+/)
+        .filter(Boolean)
+        .join("-");
+    }
+
+    function buildBlackboxCsvTextClient(results) {
+      const lines = [BLACKBOX_CSV_HEADER.map(csvEscapeCell).join(",")];
+      for (const r of results) {
+        const kw = (r.suggested_tags || []).map(String).join(", ");
+        const row = [
+          r.filename || "",
+          r.summary || "",
+          kw,
+          "Travel",
+          batchNameFromPathClient(r.path || ""),
+          "", "", "", "", "", "",
+          r.title || "",
+          "", ""
+        ];
+        lines.push(row.map(csvEscapeCell).join(","));
+      }
+      return lines.join(String.fromCharCode(10));
+    }
+
     function highlightBrackets(text) {
       return text.replaceAll("[", "<mark>").replaceAll("]", "</mark>");
     }
 
     function renderResults(results) {
+      lastResults = results;
       resultCountEl.textContent = `${results.length} result${results.length === 1 ? "" : "s"}`;
       if (!results.length) {
         resultsEl.innerHTML = `<article class="panel empty">No matches yet. Try a broader search or clear the status filter.</article>`;
@@ -654,6 +838,40 @@ def render_index_html(*, demo_mode: bool = False) -> str:
           showToast(payload.error || "Reveal failed");
         }
       }
+    });
+
+    const exportBtn = document.getElementById("exportBlackbox");
+    exportBtn.addEventListener("click", async () => {
+      if (demoMode) {
+        const text = buildBlackboxCsvTextClient(lastResults);
+        const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "argus-blackbox-export.csv";
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast("Exported CSV (Blackbox)");
+        return;
+      }
+      const params = new URLSearchParams({
+        q: queryInput.value,
+        status: statusSelect.value,
+        limit: limitSelect.value
+      });
+      const response = await fetch(`/api/export/blackbox?${params.toString()}`);
+      if (!response.ok) {
+        showToast("Export failed");
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "argus-blackbox-export.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("Exported CSV (Blackbox)");
     });
 
     queryInput.addEventListener("input", scheduleSearch);
