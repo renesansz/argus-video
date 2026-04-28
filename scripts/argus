@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+VENV_DIR="${REPO_ROOT}/.venv"
+VENV_ARGUS="${VENV_DIR}/bin/argus"
+INSTALL_STAMP="${VENV_DIR}/.argus-editable-install-stamp"
+
+if [[ ! -f "${VENV_DIR}/pyvenv.cfg" ]]; then
+  echo "Creating virtual environment at ${VENV_DIR}"
+  python3 -m venv "${VENV_DIR}"
+fi
+
+if [[ -x "${VENV_DIR}/bin/python" ]]; then
+  VENV_PYTHON="${VENV_DIR}/bin/python"
+else
+  VENV_PYTHON="${VENV_DIR}/bin/python3"
+fi
+
+needs_install=0
+if [[ ! -x "${VENV_ARGUS}" ]]; then
+  needs_install=1
+elif [[ ! -f "${INSTALL_STAMP}" ]]; then
+  needs_install=1
+elif [[ "${REPO_ROOT}/pyproject.toml" -nt "${INSTALL_STAMP}" ]]; then
+  needs_install=1
+fi
+
+if [[ "${needs_install}" -eq 1 ]]; then
+  echo "Installing Argus in editable mode"
+  "${VENV_PYTHON}" -m pip install -e "${REPO_ROOT}"
+  touch "${INSTALL_STAMP}"
+fi
+
+# Bootstrap only: create/refresh venv and editable install, then exit (no argus subcommand)
+if [[ "${1:-}" == "install" ]]; then
+  shift
+  if [[ "$#" -gt 0 ]]; then
+    echo "usage: $0 install" >&2
+    exit 2
+  fi
+  echo "Argus is ready: virtual environment at ${VENV_DIR}."
+  exit 0
+fi
+
+exec "${VENV_ARGUS}" "$@"

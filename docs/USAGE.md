@@ -38,6 +38,50 @@ source .venv/bin/activate
 python3 -m pip install -e .
 ```
 
+If you prefer not to repeat those steps each shell session, use the repo wrapper script:
+
+```bash
+./scripts/argus status
+```
+
+The script creates `.venv` when missing, installs Argus in editable mode when needed, and then runs the CLI command you pass.
+
+To set up the Python environment and editable install only (without running a scan or other `argus` subcommand), run:
+
+```bash
+./scripts/argus install
+```
+
+Then use the script for normal commands, for example:
+
+```bash
+./scripts/argus doctor --model gemma3
+./scripts/argus scan /path/to/source --output-dir /path/to/output
+./scripts/argus serve --output-dir /path/to/output
+```
+
+### Makefile shortcuts
+
+If you have `make` installed, the repository includes a [`Makefile`](../Makefile) with targets that call `./scripts/argus`, so the virtualenv and editable install behave the same as running the script directly.
+
+```bash
+make install
+make help
+make status
+make doctor MODEL=gemma3
+make run SOURCE=/path/to/footage OUTPUT_DIR=~/ArgusOut
+make search QUERY=boat
+make serve ARGS=--open-browser
+```
+
+For arbitrary `argus` invocations, use the `cli` target:
+
+```bash
+make cli ARGS="index --pretty"
+```
+
+Common variables: `SOURCE`, `OUTPUT_DIR`, `MODEL`, `OLLAMA_HOST`, `QUERY` (required for `search`), `HOST` and `PORT` (for `serve`), and `ARGS` (extra flags for the subcommand). See the `Makefile` comment block for a full list.
+
 Install FFmpeg if it is not already available:
 
 ```bash

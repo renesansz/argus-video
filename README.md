@@ -58,6 +58,8 @@ argus serve --output-dir ~/ArgusOutput --open-browser
 
 If you want a more detailed walkthrough, see [docs/USAGE.md](docs/USAGE.md).
 
+You can also use `make` from the repository root (see [Makefile](Makefile) and the “Makefile shortcuts” section in [docs/USAGE.md](docs/USAGE.md)) for the same `argus` commands with shorter invocations, for example `make install` to set up the virtual environment, then `make status` and `make doctor MODEL=gemma3`.
+
 ## Current Status
 
 The repository currently includes the first runnable slice:
