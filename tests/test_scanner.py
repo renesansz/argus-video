@@ -8,6 +8,7 @@ from urllib.error import URLError
 from unittest.mock import MagicMock, patch
 
 from argus.captioner import (
+    caption_frame,
     caption_output_items,
     match_ollama_model,
     normalize_clip_title,
@@ -141,6 +142,32 @@ class ScannerTests(unittest.TestCase):
         self.assertLessEqual(len(result["title"]), 100)
         self.assertEqual(result["summary"], "Wide exterior drone footage.")
         self.assertEqual(result["suggested_tags"], ["drone", "aerial"])
+        payload = ollama_chat_mock.call_args[0][0]
+        self.assertNotIn("options", payload)
+
+    @patch("argus.captioner.ollama_chat")
+    def test_summarize_captions_includes_options_for_gemma4(self, ollama_chat_mock) -> None:
+        ollama_chat_mock.return_value = {
+            "message": {
+                "content": (
+                    '{"title":"Short title","summary":"Wide exterior drone footage here.",'
+                    '"suggested_tags":["a","b","c"]}'
+                )
+            }
+        }
+
+        result = summarize_captions(
+            [{"timestamp_seconds": 1.0, "caption": "Drone shot over a road."}],
+            model="gemma4",
+            ollama_host="http://localhost:11434",
+        )
+
+        self.assertEqual(result["status"], "ok")
+        payload = ollama_chat_mock.call_args[0][0]
+        self.assertIn("options", payload)
+        self.assertEqual(payload["options"]["temperature"], 1.0)
+        self.assertEqual(payload["options"]["top_p"], 0.95)
+        self.assertEqual(payload["options"]["top_k"], 64)
 
     @patch("argus.captioner.ollama_chat")
     def test_summarize_captions_rejects_missing_title(self, ollama_chat_mock) -> None:
@@ -158,6 +185,65 @@ class ScannerTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "error")
         self.assertIn("required fields", result["reason"])
+        payload = ollama_chat_mock.call_args[0][0]
+        self.assertNotIn("options", payload)
+
+    @patch("argus.captioner.ollama_chat")
+    def test_caption_frame_includes_options_for_gemma4(self, ollama_chat_mock) -> None:
+        ollama_chat_mock.return_value = {
+            "message": {
+                "content": json.dumps(
+                    {
+                        "short_caption": "A test frame.",
+                        "tags": ["tag"] * 40,
+                        "visible_text": [],
+                    }
+                )
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = Path(temp_dir) / "frame.jpg"
+            image_path.write_bytes(b"\xff\xd8\xff")
+            result = caption_frame(
+                image_path,
+                model="gemma4:latest",
+                ollama_host="http://localhost:11434",
+            )
+
+        self.assertEqual(result["status"], "ok")
+        payload = ollama_chat_mock.call_args[0][0]
+        self.assertIn("options", payload)
+        self.assertEqual(payload["options"]["temperature"], 1.0)
+        self.assertEqual(payload["options"]["top_p"], 0.95)
+        self.assertEqual(payload["options"]["top_k"], 64)
+
+    @patch("argus.captioner.ollama_chat")
+    def test_caption_frame_omits_options_for_non_gemma4(self, ollama_chat_mock) -> None:
+        ollama_chat_mock.return_value = {
+            "message": {
+                "content": json.dumps(
+                    {
+                        "short_caption": "A test frame.",
+                        "tags": ["tag"] * 40,
+                        "visible_text": [],
+                    }
+                )
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = Path(temp_dir) / "frame.jpg"
+            image_path.write_bytes(b"\xff\xd8\xff")
+            result = caption_frame(
+                image_path,
+                model="gemma3",
+                ollama_host="http://localhost:11434",
+            )
+
+        self.assertEqual(result["status"], "ok")
+        payload = ollama_chat_mock.call_args[0][0]
+        self.assertNotIn("options", payload)
 
     def test_normalize_clip_title_truncates_to_max_length(self) -> None:
         long_title = "word " * 40

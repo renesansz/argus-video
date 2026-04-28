@@ -86,3 +86,6 @@ serve: ## Web UI: make serve [OUTPUT_DIR=...] [HOST=...] [PORT=...] [ARGS="--ope
 
 run: ## Full pipeline: make run [SOURCE=...] [OUTPUT_DIR=...] [MODEL=...] [ARGS="..."]
 	$(ARGUS) run $(SOURCE) --output-dir $(OUTPUT_DIR) $(arg_model) $(arg_ollama_host) $(ARGS)
+
+test: ## Run tests: make test
+	PYTHONPATH=src python3 -m unittest tests.test_scanner -v

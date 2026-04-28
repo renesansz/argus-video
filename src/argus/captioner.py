@@ -234,13 +234,19 @@ def caption_frame(image_path: Path, *, model: str, ollama_host: str) -> dict:
         "messages": [
             {
                 "role": "user",
-                "content": FRAME_CAPTION_PROMPT,
                 "images": [encoded],
+                "content": FRAME_CAPTION_PROMPT,
             }
         ],
         "format": "json",
         "stream": False,
     }
+    if base_model_name(model) == "gemma4":
+        payload["options"] = {
+            "temperature": 1.0,
+            "top_p": 0.95,
+            "top_k": 64,
+        }
 
     try:
         response = ollama_chat(payload, ollama_host=ollama_host)
@@ -303,6 +309,12 @@ def summarize_captions(
         "format": "json",
         "stream": False,
     }
+    if base_model_name(model) == "gemma4":
+        payload["options"] = {
+            "temperature": 1.0,
+            "top_p": 0.95,
+            "top_k": 64,
+        }
 
     try:
         response = ollama_chat(payload, ollama_host=ollama_host)
